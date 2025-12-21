@@ -30,6 +30,11 @@ export const DashboardSidebar = ({ isOpen, onToggle, userRole }: DashboardSideba
           label: 'My Orders',
           icon: ShoppingCart,
         },
+        {
+          href: '/dashboard/profile',
+          label: 'Profile',
+          icon: Users,
+        },
       ];
     }
 

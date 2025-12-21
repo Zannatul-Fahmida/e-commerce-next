@@ -80,7 +80,7 @@ const DashboardLayout = ({ userRole, children, hideStats = false }: DashboardLay
           <div className="flex items-center gap-2 mb-6 lg:hidden">
             <button
               onClick={handleToggle}
-              className="p-2 bg-teal-700 text-white rounded"
+              className="p-2 bg-primary text-white rounded"
             >
               <Menu className="w-4 h-4" />
             </button>
