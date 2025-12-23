@@ -15,6 +15,7 @@ interface User {
   id: string;
   email?: string;
   full_name: string;
+  avatar_url?: string;
 }
 
 const DashboardNavbar = ({ className = '' }: DashboardNavbarProps) => {
@@ -29,13 +30,15 @@ const DashboardNavbar = ({ className = '' }: DashboardNavbarProps) => {
       if (user && !error) {
         const { data: profile } = await supabase
           .from('profiles')
-          .select('full_name, email')
+          .select('full_name, email, avatar_url')
           .eq('id', user.id)
           .single();
         
         setUser({
           ...user,
-          full_name: profile?.full_name || user.email?.split('@')[0] || 'User'
+          full_name: profile?.full_name || user.email?.split('@')[0] || 'User',
+          email: profile?.email || user.email,
+          avatar_url: profile?.avatar_url || undefined,
         });
       }
     };
@@ -91,10 +94,16 @@ const DashboardNavbar = ({ className = '' }: DashboardNavbarProps) => {
         <div className="relative">
           <button
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            className="w-10 h-10 bg-primary-600 text-white rounded-full flex items-center justify-center transition-colors duration-200 font-semibold text-sm"
+            className={`w-10 h-10 rounded-full overflow-hidden flex items-center justify-center transition-colors duration-200 font-semibold text-sm ${
+              user?.avatar_url ? 'bg-white border' : 'bg-primary-600 text-white'
+            }`}
             aria-label="User menu"
           >
-            {getUserInitial()}
+            {user?.avatar_url ? (
+              <img src={user.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+            ) : (
+              getUserInitial()
+            )}
           </button>
 
           {isDropdownOpen && (

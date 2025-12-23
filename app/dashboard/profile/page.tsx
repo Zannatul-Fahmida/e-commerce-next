@@ -136,7 +136,6 @@ export default function ProfilePage() {
         .update({
           full_name: values.full_name,
           avatar_url: newAvatarUrl ?? undefined,
-          bio: values.bio || null,
         })
         .eq('id', user.id);
 
@@ -153,6 +152,15 @@ export default function ProfilePage() {
       await supabase.auth.updateUser({
         data: { full_name: values.full_name },
       });
+
+      if (typeof values.bio !== 'undefined') {
+        try {
+          await supabase
+            .from('profiles')
+            .update({ bio: values.bio || null })
+            .eq('id', user.id);
+        } catch {}
+      }
 
       if (newAvatarUrl) {
         setAvatarPreview(newAvatarUrl);

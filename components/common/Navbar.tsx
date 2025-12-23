@@ -22,6 +22,7 @@ interface UserProfile {
   email?: string;
   full_name: string;
   role: 'admin' | 'customer';
+  avatar_url?: string;
 }
 
 export function Navbar({ onMenuToggle, isSidebarOpen }: NavbarProps) {
@@ -39,17 +40,18 @@ export function Navbar({ onMenuToggle, isSidebarOpen }: NavbarProps) {
       try {
         const { data: { user: authUser }, error } = await getUserCached();
         if (authUser && !error) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('full_name, email, role')
-            .eq('id', authUser.id)
-            .single();
-          setUser({
-            id: authUser.id,
-            email: authUser.email,
-            full_name: profile?.full_name || authUser.email?.split('@')[0] || 'User',
-            role: profile?.role || 'customer'
-          });
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, email, role, avatar_url')
+          .eq('id', authUser.id)
+          .single();
+        setUser({
+          id: authUser.id,
+          email: authUser.email,
+          full_name: profile?.full_name || authUser.email?.split('@')[0] || 'User',
+          role: profile?.role || 'customer',
+          avatar_url: profile?.avatar_url || undefined
+        });
         }
       } catch (error) {
         console.error('Error fetching user:', error);
@@ -200,9 +202,15 @@ export function Navbar({ onMenuToggle, isSidebarOpen }: NavbarProps) {
               <div className="relative">
                 <button
                   onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
-                  className="w-10 h-10 bg-primary-600 hover:bg-primary-700 text-white rounded-full flex items-center justify-center transition-colors duration-200 font-semibold text-sm"
+                  className={`w-10 h-10 rounded-full overflow-hidden flex items-center justify-center transition-colors duration-200 font-semibold text-sm ${
+                    user?.avatar_url ? 'bg-white border' : 'bg-primary-600 hover:bg-primary-700 text-white'
+                  }`}
                 >
-                  {getUserInitial()}
+                  {user?.avatar_url ? (
+                    <img src={user.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    getUserInitial()
+                  )}
                 </button>
 
                 {isUserDropdownOpen && (
@@ -310,9 +318,13 @@ export function Navbar({ onMenuToggle, isSidebarOpen }: NavbarProps) {
               ) : user ? (
                 <div className="border-t border-gray-200 pt-3 mt-3">
                   <div className="flex items-center space-x-3 py-2 px-3 mb-2">
-                    <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center text-white font-semibold">
-                      {getUserInitial()}
-                    </div>
+                    {user?.avatar_url ? (
+                      <img src={user.avatar_url} alt="Avatar" className="w-10 h-10 rounded-full object-cover border" />
+                    ) : (
+                      <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center text-white font-semibold">
+                        {getUserInitial()}
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{user.full_name}</p>
                       <p className="text-xs text-gray-500 truncate">{user.email}</p>
