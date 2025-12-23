@@ -6,7 +6,7 @@ import { DashboardSidebar } from '@/components/dashboard/DashboardSidebar';
 import DashboardNavbar from '@/components/dashboard/DashboardNavbar';
 import { Trash2, Search, Filter, Menu, Users, User, Mail, Calendar, Shield } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase';
+import { supabase, getUserCached } from '@/lib/supabase';
 
 interface Profile {
   id: string;
@@ -40,8 +40,8 @@ export default function AllUsersPage() {
       setLoading(true);
 
       // Check if user is logged in and an admin
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
+      const { data: { user } } = await getUserCached();
+      if (!user) {
         toast.error('Please log in to view users');
         setLoading(false);
         return;
@@ -209,6 +209,12 @@ export default function AllUsersPage() {
               <div className="p-6 sm:p-8 text-center">
                 <div className="inline-block w-6 h-6 border-2 border-primary-600 border-t-transparent rounded-full animate-spin"></div>
                 <p className="mt-2 text-sm text-gray-600">Loading users...</p>
+              </div>
+            ) : users.length === 0 ? (
+              <div className="p-6 sm:p-8 text-center">
+                <Users className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-2">No users found</h3>
+                <p className="text-sm text-gray-600">Users will appear here once registrations start.</p>
               </div>
             ) : (
               <>

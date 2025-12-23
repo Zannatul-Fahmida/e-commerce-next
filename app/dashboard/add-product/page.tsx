@@ -3,7 +3,7 @@
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
 import DashboardNavbar from "@/components/dashboard/DashboardNavbar";
 import { ArrowLeft, DollarSign, FileText, Hash, ImageIcon, Menu, Package, Save, Tag, X } from "lucide-react";
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import Image from "next/image";
@@ -135,6 +135,10 @@ const AddProductPage = () => {
   });
 
   const router = useRouter();
+  const coverInputRef = useRef<HTMLInputElement>(null);
+  const additionalInputRef = useRef<HTMLInputElement>(null);
+  const sanitizeUrl = (url: string) => (url || '').replace(/\)+$/, '').trim();
+  const isBlobUrl = (url?: string) => (url || '').startsWith('blob:');
 
   const handleToggle = () => {
     setIsSidebarOpen((prev) => !prev);
@@ -212,12 +216,23 @@ const AddProductPage = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const previewUrl = URL.createObjectURL(file);
+    setProductData((prev) => ({
+      ...prev,
+      cover_image: previewUrl,
+    }));
     const filePath = `products/cover_${Date.now()}_${file.name}`;
     const { data, error } = await supabase.storage
       .from("product-images")
       .upload(filePath, file);
     if (error) {
       toast.error(`Cover image upload failed: ${error.message}`);
+      setProductData((prev) => ({
+        ...prev,
+        cover_image: "",
+        cover_image_path: "",
+      }));
+      URL.revokeObjectURL(previewUrl);
       return;
     }
     const { data: urlData } = supabase.storage
@@ -225,9 +240,10 @@ const AddProductPage = () => {
       .getPublicUrl(data.path);
     setProductData((prev) => ({
       ...prev,
-      cover_image: urlData.publicUrl,
+      cover_image: sanitizeUrl(urlData.publicUrl),
       cover_image_path: data.path,
     }));
+    URL.revokeObjectURL(previewUrl);
   };
 
   const handleRemoveCoverImage = async () => {
@@ -247,28 +263,44 @@ const AddProductPage = () => {
     const files = e.target.files;
     if (!files) return;
 
-    const uploadedImages: string[] = [];
-    const uploadedImagePaths: string[] = [];
-    for (const file of Array.from(files)) {
+    const filesArr = Array.from(files);
+    const previews = filesArr.map((f) => URL.createObjectURL(f));
+    const baseIndex = productData.additional_images.length;
+    setProductData((prev) => ({
+      ...prev,
+      additional_images: [...prev.additional_images, ...previews],
+      additional_image_paths: [...prev.additional_image_paths, ...new Array(previews.length).fill("")],
+    }));
+    for (let i = 0; i < filesArr.length; i++) {
+      const file = filesArr[i];
       const filePath = `products/additional_${Date.now()}_${file.name}`;
       const { data, error } = await supabase.storage
         .from("product-images")
         .upload(filePath, file);
       if (error) {
         toast.error(`Additional image upload failed: ${error.message}`);
-        return;
+        setProductData((prev) => {
+          const imgs = [...prev.additional_images];
+          const paths = [...prev.additional_image_paths];
+          imgs.splice(baseIndex + i, 1);
+          paths.splice(baseIndex + i, 1);
+          return { ...prev, additional_images: imgs, additional_image_paths: paths };
+        });
+        URL.revokeObjectURL(previews[i]);
+        continue;
       }
       const { data: urlData } = supabase.storage
         .from("product-images")
         .getPublicUrl(data.path);
-      uploadedImages.push(urlData.publicUrl);
-      uploadedImagePaths.push(data.path);
+      setProductData((prev) => {
+        const imgs = [...prev.additional_images];
+        const paths = [...prev.additional_image_paths];
+        imgs[baseIndex + i] = sanitizeUrl(urlData.publicUrl);
+        paths[baseIndex + i] = data.path;
+        return { ...prev, additional_images: imgs, additional_image_paths: paths };
+      });
+      URL.revokeObjectURL(previews[i]);
     }
-    setProductData((prev) => ({
-      ...prev,
-      additional_images: [...prev.additional_images, ...uploadedImages],
-      additional_image_paths: [...prev.additional_image_paths, ...uploadedImagePaths],
-    }));
   };
 
   const handleRemoveAdditionalImage = async (index: number) => {
@@ -308,12 +340,24 @@ const AddProductPage = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const previewUrl = URL.createObjectURL(file);
+    setProductData((prev) => {
+      const newOptions = [...prev.options];
+      newOptions[index] = { ...newOptions[index], image: previewUrl, image_path: "" };
+      return { ...prev, options: newOptions };
+    });
     const filePath = `products/option_${Date.now()}_${file.name}`;
     const { data, error } = await supabase.storage
       .from("product-images")
       .upload(filePath, file);
     if (error) {
       toast.error(`Option image upload failed: ${error.message}`);
+      setProductData((prev) => {
+        const newOptions = [...prev.options];
+        newOptions[index] = { ...newOptions[index], image: "", image_path: "" };
+        return { ...prev, options: newOptions };
+      });
+      URL.revokeObjectURL(previewUrl);
       return;
     }
     const { data: urlData } = supabase.storage
@@ -322,9 +366,10 @@ const AddProductPage = () => {
     
     setProductData((prev) => {
       const newOptions = [...prev.options];
-      newOptions[index] = { ...newOptions[index], image: urlData.publicUrl, image_path: data.path };
+      newOptions[index] = { ...newOptions[index], image: sanitizeUrl(urlData.publicUrl), image_path: data.path };
       return { ...prev, options: newOptions };
     });
+    URL.revokeObjectURL(previewUrl);
   };
 
   const handleRemoveOptionImage = async (index: number) => {
@@ -934,19 +979,38 @@ const AddProductPage = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Cover Image <span className="text-red-500">*</span>
                       </label>
-                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                      <div
+                        className="border-2 border-dashed border-gray-300 rounded-lg p-4 cursor-pointer"
+                        onClick={() => coverInputRef.current?.click()}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') coverInputRef.current?.click();
+                        }}
+                      >
                         {productData.cover_image ? (
                           <div className="relative">
-                            <Image
-                              src={productData.cover_image}
-                              alt="Cover"
-                              width={200}
-                              height={200}
-                              className="w-full h-48 object-cover rounded-md"
-                            />
+                            {isBlobUrl(productData.cover_image) ? (
+                              <img
+                                src={sanitizeUrl(productData.cover_image)}
+                                alt="Cover"
+                                className="w-full h-48 object-cover rounded-md"
+                              />
+                            ) : (
+                              <Image
+                                src={sanitizeUrl(productData.cover_image)}
+                                alt="Cover"
+                                width={200}
+                                height={200}
+                                className="w-full h-48 object-cover rounded-md"
+                              />
+                            )}
                             <button
                               type="button"
-                              onClick={handleRemoveCoverImage}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemoveCoverImage();
+                              }}
                               className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
                             >
                               <X className="w-4 h-4" />
@@ -956,20 +1020,19 @@ const AddProductPage = () => {
                           <div className="text-center">
                             <ImageIcon className="mx-auto h-12 w-12 text-gray-400" />
                             <div className="mt-4">
-                              <label className="cursor-pointer">
-                                <span className="mt-2 block text-sm font-medium text-gray-900">
-                                  Upload cover image
-                                </span>
-                                <input
-                                  type="file"
-                                  className="sr-only"
-                                  accept="image/*"
-                                  onChange={handleCoverImageUpload}
-                                />
-                              </label>
+                              <span className="mt-2 block text-sm font-medium text-gray-900">
+                                Upload cover image
+                              </span>
                             </div>
                           </div>
                         )}
+                        <input
+                          ref={coverInputRef}
+                          type="file"
+                          className="sr-only"
+                          accept="image/*"
+                          onChange={handleCoverImageUpload}
+                        />
                       </div>
                     </div>
 
@@ -978,36 +1041,51 @@ const AddProductPage = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Additional Images
                       </label>
-                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                      <div
+                        className="border-2 border-dashed border-gray-300 rounded-lg p-4 cursor-pointer"
+                        onClick={() => additionalInputRef.current?.click()}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') additionalInputRef.current?.click();
+                        }}
+                      >
                         <div className="text-center">
                           <ImageIcon className="mx-auto h-12 w-12 text-gray-400" />
                           <div className="mt-4">
-                            <label className="cursor-pointer">
-                              <span className="mt-2 block text-sm font-medium text-gray-900">
-                                Upload additional images
-                              </span>
-                              <input
-                                type="file"
-                                className="sr-only"
-                                accept="image/*"
-                                multiple
-                                onChange={handleAdditionalImagesUpload}
-                              />
-                            </label>
+                            <span className="mt-2 block text-sm font-medium text-gray-900">
+                              Upload additional images
+                            </span>
                           </div>
                         </div>
                       </div>
+                      <input
+                        ref={additionalInputRef}
+                        type="file"
+                        className="sr-only"
+                        accept="image/*"
+                        multiple
+                        onChange={handleAdditionalImagesUpload}
+                      />
                       {productData.additional_images.length > 0 && (
                         <div className="mt-4 grid grid-cols-2 gap-2">
                           {productData.additional_images.map((image, index) => (
                             <div key={index} className="relative">
-                              <Image
-                                src={image}
-                                alt={`Additional ${index + 1}`}
-                                width={100}
-                                height={100}
-                                className="w-full h-24 object-cover rounded-md"
-                              />
+                              {isBlobUrl(image) ? (
+                                <img
+                                  src={sanitizeUrl(image)}
+                                  alt={`Additional ${index + 1}`}
+                                  className="w-full h-24 object-cover rounded-md"
+                                />
+                              ) : (
+                                <Image
+                                  src={sanitizeUrl(image)}
+                                  alt={`Additional ${index + 1}`}
+                                  width={100}
+                                  height={100}
+                                  className="w-full h-24 object-cover rounded-md"
+                                />
+                              )}
                               <button
                                 type="button"
                                 onClick={() => handleRemoveAdditionalImage(index)}
@@ -1093,13 +1171,21 @@ const AddProductPage = () => {
                               </label>
                               {option.image ? (
                                 <div className="relative">
-                                  <Image
-                                    src={option.image}
-                                    alt={`Option ${index + 1}`}
-                                    width={60}
-                                    height={60}
-                                    className="w-16 h-16 object-cover rounded-md"
-                                  />
+                                  {isBlobUrl(option.image) ? (
+                                    <img
+                                      src={sanitizeUrl(option.image)}
+                                      alt={`Option ${index + 1}`}
+                                      className="w-16 h-16 object-cover rounded-md"
+                                    />
+                                  ) : (
+                                    <Image
+                                      src={sanitizeUrl(option.image)}
+                                      alt={`Option ${index + 1}`}
+                                      width={60}
+                                      height={60}
+                                      className="w-16 h-16 object-cover rounded-md"
+                                    />
+                                  )}
                                   <button
                                     type="button"
                                     onClick={() => handleRemoveOptionImage(index)}

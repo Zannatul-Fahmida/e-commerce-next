@@ -78,7 +78,7 @@ const ViewProductsPage = () => {
   };
 
   const handleView = (productId: string) => {
-    router.push(`/product/${productId}`);
+    router.push(`/products/${productId}`);
   };
 
   const handleDelete = async (productId: string, productName: string) => {

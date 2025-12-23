@@ -32,6 +32,10 @@ export const ProductCard = ({ product, currency = "৳" }: ProductCardProps) => 
   const { addToCart } = useCart();
   const { isFavorite, toggleFavorite, loading } = useFavorites();
   const [isToggling, setIsToggling] = useState(false);
+  const normalizeSrc = (src: string) => {
+    if (!src) return '/placeholder-product.jpg';
+    return src.replace(/\)+$/, '').trim();
+  };
   
   const hasDiscount = product.discount_price && product.discount_price < product.price;
   const discountPercentage = hasDiscount 
@@ -106,7 +110,7 @@ export const ProductCard = ({ product, currency = "৳" }: ProductCardProps) => 
         <div className="relative overflow-hidden bg-gray-50">
           <div className="relative w-full h-48">
             <Image
-              src={imageError ? '/placeholder-product.jpg' : product.cover_image}
+              src={imageError ? '/placeholder-product.jpg' : normalizeSrc(product.cover_image)}
               alt={product.name}
               fill
               className="object-contain group-hover:scale-105 transition-transform duration-300"

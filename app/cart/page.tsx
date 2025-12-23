@@ -38,6 +38,7 @@ const CartPage = () => {
   const [showPaymentOptions, setShowPaymentOptions] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'online' | 'cod'>('online');
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const cleanUrl = (url?: string) => (url || '').replace(/\)+$/, '').trim();
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -243,25 +244,7 @@ const CartPage = () => {
         throw new Error(`Failed to create order: ${orderError?.message || 'Unknown error'}`);
       }
 
-      // Create order_items for each cart item
-      const itemsPayload = cartItemsWithProducts.map((item) => ({
-        order_id: orderData.id,
-        product_id: item.product_id,
-        quantity: item.quantity,
-        unit_price: getItemPrice(item),
-        selected_option: item.selected_option || null,
-      }));
-
-      const { error: orderItemsError } = await supabase
-        .from('order_items')
-        .insert(itemsPayload);
-
-      if (orderItemsError) {
-        console.error('Failed to create order items:', orderItemsError);
-        throw new Error(`Failed to create order items: ${orderItemsError.message}`);
-      }
-
-      console.log('Order and items created successfully:', { orderId: orderData.id, items: itemsPayload.length });
+      console.log('Order created successfully:', { orderId: orderData.id });
 
       if (paymentMethod === 'cod') {
         // For Cash on Delivery, clear cart and redirect
@@ -395,8 +378,8 @@ const CartPage = () => {
                       {cartItemsWithProducts.map((item) => (
                         <div key={item.id} className="flex items-center space-x-4 p-4 border border-gray-200 rounded-xl hover:shadow-md transition-shadow">
                           <div className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-200">
-                            <Image
-                              src={item.product.cover_image}
+                          <Image
+                              src={cleanUrl(item.product.cover_image)}
                               alt={item.product.name}
                               layout="fill"
                               objectFit="cover"

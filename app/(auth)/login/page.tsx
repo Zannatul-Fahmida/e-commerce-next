@@ -43,8 +43,8 @@ export default function LoginPage() {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        setIsLoading(true)
-        await supabase.auth.signOut();
+        router.push('/dashboard');
+        return;
       }
       setIsLoading(false);
     };

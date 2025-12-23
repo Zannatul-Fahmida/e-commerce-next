@@ -2,7 +2,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { supabase, getUserCached } from "@/lib/supabase";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { Package, DollarSign, Calendar, CreditCard, ShoppingCart } from "lucide-react";
@@ -73,9 +73,8 @@ const MyOrdersPage = () => {
     const fetchUserRole = async () => {
       try {
         // Get the current user from Supabase auth
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-        if (authError || !user) {
+        const { data: { user } } = await getUserCached();
+        if (!user) {
           toast.error('Please log in to access the dashboard');
           router.push('/login');
           return;
@@ -111,11 +110,8 @@ const MyOrdersPage = () => {
     const fetchOrders = async () => {
       try {
         setOrdersLoading(true);
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
-        if (userError || !user) {
+        const { data: { user } } = await getUserCached();
+        if (!user) {
           toast.error("Please log in to view your orders");
           setOrdersLoading(false);
           return;
@@ -124,12 +120,8 @@ const MyOrdersPage = () => {
         const { data, error } = await supabase
           .from("orders")
           .select(`
-            id, transaction_id, status, amount, currency, created_at, payment_method, order_status, quantity,
-            products!fk_product_id(name),
-            order_items(
-              product_id, quantity, unit_price, selected_option,
-              products!order_items_product_id_fkey(name)
-            )
+            id, transaction_id, status, amount, currency, created_at, payment_method, order_status, quantity, product_id,
+            products!fk_product_id(name)
           `)
           .eq("user_id", user.id)
           .order("created_at", { ascending: false });
@@ -141,14 +133,14 @@ const MyOrdersPage = () => {
         } else {
           // Normalize into aggregated items with a legacy fallback
           let normalized = data.map((order: any) => {
-            const items: OrderItem[] = Array.isArray(order.order_items)
-              ? order.order_items.map((oi: any) => ({
-                  product_id: oi.product_id,
-                  quantity: oi.quantity,
-                  unit_price: oi.unit_price,
-                  selected_option: oi.selected_option,
-                  product_name: oi.products?.name || "",
-                }))
+            const items: OrderItem[] = order.product_id
+              ? [
+                  {
+                    product_id: order.product_id,
+                    quantity: order.quantity,
+                    product_name: order.products?.name || "",
+                  },
+                ]
               : [];
 
             return {

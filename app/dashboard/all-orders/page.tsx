@@ -4,7 +4,8 @@ import { DashboardSidebar } from '@/components/dashboard/DashboardSidebar';
 import DashboardNavbar from '@/components/dashboard/DashboardNavbar';
 import { Menu, ShoppingCart, Package, DollarSign, Calendar, User, CreditCard, MoreVertical, Trash2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { createPortal } from 'react-dom';
+import { supabase, getUserCached } from '@/lib/supabase';
 import { toast } from 'sonner';
 
 interface OrderItem {
@@ -41,6 +42,7 @@ const AllOrdersPage = () => {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [updateLoading, setUpdateLoading] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
 
   const handleToggle = () => {
     setIsSidebarOpen((prev) => !prev);
@@ -56,8 +58,8 @@ const AllOrdersPage = () => {
       setError(null);
 
       // Check if user is logged in and an admin
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
+      const { data: { user } } = await getUserCached();
+      if (!user) {
         toast.error('Please log in to view orders');
         setLoading(false);
         return;
@@ -67,12 +69,8 @@ const AllOrdersPage = () => {
       const { data, error } = await supabase
         .from('orders')
         .select(`
-          id, transaction_id, status, order_status, amount, currency, user_id, created_at, payment_method, quantity,
-          products!fk_product_id(name),
-          order_items(
-            product_id, quantity, unit_price, selected_option,
-            products!order_items_product_id_fkey(name)
-          )
+          id, transaction_id, status, order_status, amount, currency, user_id, created_at, payment_method, quantity, product_id,
+          products!fk_product_id(name)
         `)
         .order('created_at', { ascending: false });
 
@@ -116,14 +114,14 @@ const AllOrdersPage = () => {
           }
 
           // Normalize items with legacy fallback
-          const items: OrderItem[] = Array.isArray(order.order_items)
-            ? order.order_items.map((oi: any) => ({
-                product_id: oi.product_id,
-                quantity: oi.quantity,
-                unit_price: oi.unit_price,
-                selected_option: oi.selected_option,
-                product_name: oi.products?.name || '',
-              }))
+          const items: OrderItem[] = order.product_id
+            ? [
+                {
+                  product_id: order.product_id,
+                  quantity: order.quantity,
+                  product_name: order.products?.name || '',
+                },
+              ]
             : [];
 
           return {
@@ -503,62 +501,24 @@ const AllOrdersPage = () => {
                           <td className="px-4 py-4 flex justify-center">
                             <div className="relative">
                               <button
-                                onClick={() => setOpenDropdown(openDropdown === order.id ? null : order.id)}
+                                onClick={(e) => {
+                                  const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                                  const menuWidth = 224; // w-56
+                                  const left = Math.max(8, rect.right - menuWidth);
+                                  const top = rect.bottom + 4;
+                                  if (openDropdown === order.id) {
+                                    setOpenDropdown(null);
+                                    setMenuPos(null);
+                                  } else {
+                                    setOpenDropdown(order.id);
+                                    setMenuPos({ top, left });
+                                  }
+                                }}
                                 className="inline-flex items-center p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
                                 disabled={updateLoading === order.id || deleteLoading === order.id}
                               >
                                 <MoreVertical className="w-4 h-4" />
                               </button>
-                              
-                              {openDropdown === order.id && (
-                                <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg border border-gray-200 z-10">
-                                  <div className="py-1">
-                                    <div className="px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                                      Change Order Status
-                                    </div>
-                                    {[
-                                      'pending',
-                                      'confirmed',
-                                      'processing',
-                                      'shipped',
-                                      'in_transit',
-                                      'out_for_delivery',
-                                      'delivered',
-                                      'return_requested',
-                                      'returned',
-                                      'cancelled',
-                                      'failed_delivery',
-                                    ].map((ps) => (
-                                      <button
-                                        key={ps}
-                                        onClick={() => handlePaymentStatusChange(order.id, ps as any)}
-                                        disabled={updateLoading === order.id || order.order_status === ps}
-                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                                      >
-                                        <div className={`w-2 h-2 rounded-full mr-2 ${getPaymentStatusColor(ps).replace('bg-', '').split(' ')[0] === 'green-100' ? 'bg-green-400' : 'bg-gray-400'}`}></div>
-                                        {formatPaymentStatus(ps)}
-                                        {order.order_status === ps && (
-                                          <span className="ml-auto text-xs text-gray-400">(Current)</span>
-                                        )}
-                                      </button>
-                                    ))}
-                                    <div className="border-t border-gray-100 mt-1">
-                                      <button
-                                        onClick={() => handleDelete(order.id, order.transaction_id)}
-                                        disabled={deleteLoading === order.id}
-                                        className="w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                                      >
-                                        {deleteLoading === order.id ? (
-                                          <div className="w-4 h-4 mr-2 border border-red-600 border-t-transparent rounded-full animate-spin"></div>
-                                        ) : (
-                                          <Trash2 className="w-4 h-4 mr-2" />
-                                        )}
-                                        Delete Order
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
                             </div>
                           </td>
                         </tr>
@@ -566,6 +526,74 @@ const AllOrdersPage = () => {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Desktop Actions Menu Portal */}
+                {openDropdown && menuPos && (() => {
+                  const order = orders.find((o) => o.id === openDropdown);
+                  if (!order) return null;
+                  return createPortal(
+                    <div className="fixed inset-0 z-50">
+                      <div
+                        className="absolute inset-0"
+                        onClick={() => {
+                          setOpenDropdown(null);
+                          setMenuPos(null);
+                        }}
+                      />
+                      <div
+                        className="w-56 bg-white rounded-md shadow-lg border border-gray-200"
+                        style={{ position: 'fixed', top: menuPos.top, left: menuPos.left }}
+                      >
+                        <div className="py-1">
+                          <div className="px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                            Change Order Status
+                          </div>
+                          {[
+                            'pending',
+                            'confirmed',
+                            'processing',
+                            'shipped',
+                            'in_transit',
+                            'out_for_delivery',
+                            'delivered',
+                            'return_requested',
+                            'returned',
+                            'cancelled',
+                            'failed_delivery',
+                          ].map((ps) => (
+                            <button
+                              key={ps}
+                              onClick={() => handlePaymentStatusChange(order.id, ps as any)}
+                              disabled={updateLoading === order.id || order.order_status === ps}
+                              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                            >
+                              <div className="w-2 h-2 rounded-full mr-2 bg-gray-400"></div>
+                              {formatPaymentStatus(ps)}
+                              {order.order_status === ps && (
+                                <span className="ml-auto text-xs text-gray-400">(Current)</span>
+                              )}
+                            </button>
+                          ))}
+                          <div className="border-t border-gray-100 mt-1">
+                            <button
+                              onClick={() => handleDelete(order.id, order.transaction_id)}
+                              disabled={deleteLoading === order.id}
+                              className="w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                            >
+                              {deleteLoading === order.id ? (
+                                <div className="w-4 h-4 mr-2 border border-red-600 border-t-transparent rounded-full animate-spin"></div>
+                              ) : (
+                                <Trash2 className="w-4 h-4 mr-2" />
+                              )}
+                              Delete Order
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>,
+                    document.body
+                  );
+                })()}
 
                 {/* Mobile & Tablet Card View */}
                 <div className="lg:hidden space-y-4 p-4">
